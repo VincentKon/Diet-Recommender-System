@@ -3,7 +3,16 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
 import pickle
-import streamlit as st
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer, PorterStemmer
+from nltk.tokenize import word_tokenize
+
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('wordnet')
+nltk.download('averaged_perceptron_tagger')
+
 popular_df = pickle.load(open("artifacts/popular.pickle", "rb"))
 app = Flask(__name__)
 pt_cf = pickle.load(open("artifacts/pivot_CF.pickle", "rb"))
@@ -13,6 +22,10 @@ model_cf = pickle.load(open("artifacts/model_CF.pickle", "rb"))
 recipes_cb = pickle.load(open("artifacts/recipe_list_CB.pickle", "rb"))
 matrix_cb = pickle.load(open("artifacts/matrix_CB.pickle", "rb"))
 vectorizer_cb = pickle.load(open("artifacts/vectorizer_CB.pickle", "rb"))
+
+lemmatizer = WordNetLemmatizer()
+stop_words = stopwords.words('english')
+stemmer = PorterStemmer()
 
 
 @app.route("/")
@@ -66,15 +79,34 @@ def search():
     user_input = request.form.get("user_input_search")
     num = int(request.form.get("user_input_num"))
 
+    def get_wordnet_pos(tag):
+        tag_dict = {
+            'J': 'a',  # Adjective
+            'N': 'n',  # Noun
+            'V': 'v',  # Verb
+            'R': 'r'   # Adverb
+        }
+        return tag_dict.get(tag[0], 'n')
+
     def preprocess_input(user_input):
         # Lowercase
         user_input = user_input.lower()
         # Remove non-alphabetic characters and keep spaces
         user_input = re.sub(r'[^a-zA-Z\s]', '', user_input)
-        return user_input
+        # Tokenize
+        tokens = word_tokenize(user_input)
+        # Remove stopwords
+        tokens = [word for word in tokens if word not in stop_words]
+        # Lemmatize tokens
+        pos_tags = nltk.pos_tag(tokens)
+        lemmatized_tokens = [lemmatizer.lemmatize(word, get_wordnet_pos(pos)) for word, pos in pos_tags]
+        tokens = [stemmer.stem(token) for token in lemmatized_tokens]
+        processed_input = ' '.join(tokens)
+        # print(processed_input)
+        return processed_input
+
     processed_input = preprocess_input(user_input)
-        
-        # Transform the user input to match the TF-IDF matrix
+    
     user_input_tfidf = vectorizer_cb.transform([processed_input])
     print(preprocess_input)
         
@@ -98,6 +130,8 @@ def search():
         item.append(recommendations.iloc[i]["RecipeCategory_y"])
         item.append(recommendations.iloc[i]["RecipeId"])
         print(item[6])
+        print(num)
+        
         data.append(item)
     print(item)
     data.append(item)
